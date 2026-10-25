@@ -1,1 +1,2 @@
 # QueueFlow
+What Boto3 actually does is construct AWS-API-shaped HTTP requests (the specific format, headers, and signing scheme that AWS services expect) and send them to whatever endpoint URL it’s configured to use. By default, if you don’t specify anything, that endpoint happens to be AWS’s real servers (like sqs.ap-south-1.amazonaws.com). But that default can be overridden.
