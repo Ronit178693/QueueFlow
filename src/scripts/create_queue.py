@@ -15,7 +15,9 @@ sqs = boto3.client(
 
 
 def get_queue_url() -> str:
-    response = sqs.get_queue_url(
+    # create_queue is idempotent: if the queue already exists, SQS just
+    # returns its existing URL instead of erroring or duplicating it.
+    response = sqs.create_queue(
         QueueName=os.getenv("SQS_QUEUE_NAME", "queueflow-jobs")
     )
     return response["QueueUrl"]
