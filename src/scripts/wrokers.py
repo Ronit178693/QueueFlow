@@ -4,15 +4,18 @@ import time
 from create_queue import get_queue_url, sqs
 
 
-
 def process_job(job: dict) -> None:
+    """Simulate a background job."""
     job_id = job["job_id"]
+    job_type = job["job_type"]
 
-    print(f"Attempting job: {job_id}")
-    print("Simulating a processing failure...")
+    print(f"Processing job: {job_id}")
+    print(f"Job type: {job_type}")
 
-    raise RuntimeError("Simulated worker failure")
+    # Simulate a slow task, such as generating a report.
+    time.sleep(3)
 
+    print(f"Job completed successfully: {job_id}")
 
 
 def run_worker() -> None:
