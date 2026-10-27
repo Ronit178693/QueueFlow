@@ -1,7 +1,7 @@
 import json
 import time
 
-from create_queue import get_queue_url, sqs
+from queueflow.queue import get_queue_url, sqs
 
 
 def process_job(job: dict) -> None:
