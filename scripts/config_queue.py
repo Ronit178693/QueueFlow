@@ -1,5 +1,5 @@
 
-from create_queue import get_queue_url, sqs
+from queueflow.queue import get_queue_url, sqs
 
 queue_url = get_queue_url()
 
