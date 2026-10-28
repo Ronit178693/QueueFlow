@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from queueflow.db.models import Job
-from queueflow.queue import get_queue_url, sqs
+from queueflow.sqs_client import get_queue_url, sqs
 from queueflow.schemas import JobCreate
 
 
