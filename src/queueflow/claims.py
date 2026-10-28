@@ -12,6 +12,8 @@ def claim_job(db: Session, job_id: str) -> Job | None:
     Returns the claimed job, or None if another worker has
     already claimed it or it has already succeeded.
     """
+    
+    # Check and write are one atomic operation so no 2 processes on the DB
     statement = (
         update(Job)
         .where(
