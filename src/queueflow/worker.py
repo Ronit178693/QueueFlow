@@ -4,6 +4,7 @@ import time
 from queueflow.db.models import Job
 from queueflow.db.sessions import SessionLocal
 from queueflow.sqs_client import get_queue_url, sqs
+from queueflow.claims import claim_job
 
 
 def process_job(job_type: str, payload: dict) -> None:
@@ -35,38 +36,36 @@ def run_worker() -> None:
                 job_id = body["job_id"]
 
                 with SessionLocal() as db:
-                    job = db.get(Job, job_id)
-                    
-                    # If there is no job in the DB matching the job_id of our current msg then we dont do anything 
+                    job = claim_job(db, job_id)
+
                     if job is None:
-                        # Don't delete it: this may indicate a
-                        # publication or data-consistency problem.
-                        print(f"No database record for job {job_id}")
+                        # Another worker may be processing it, or it may
+                        # already have succeeded. Inspect before deciding.
+                        existing = db.get(Job, job_id)
+
+                        if existing is None:
+                            print(f"No database record for job {job_id}")
+
+                        elif existing.status == "succeeded":
+                            sqs.delete_message(
+                                QueueUrl=queue_url,
+                                ReceiptHandle=receipt_handle,
+                            )
+                            print(f"Removed completed duplicate: {job_id}")
+
+                        else:
+                            print(
+                                f"Could not claim {job_id}; "
+                                f"current status: {existing.status}"
+                            )
+
                         continue
-                    
-                    # If the job was already precessed but was not deleted
-                    if job.status == "succeeded":
-                        # A previous attempt may have completed the
-                        # job but crashed before deleting the message.
-                        sqs.delete_message(
-                            QueueUrl=queue_url,
-                            ReceiptHandle=receipt_handle,
-                        )
-                        print(f"Removed duplicate message for {job_id}")
-                        continue
-                    
-                    # Update the jobs status
-                    job.status = "processing"
-                    job.attempts += 1
-                    job.last_error = None
-                    db.commit()
 
                     process_job(job.job_type, job.payload)
 
                     job.status = "succeeded"
                     db.commit()
 
-                # Acknowledge the message only after the DB update.
                 sqs.delete_message(
                     QueueUrl=queue_url,
                     ReceiptHandle=receipt_handle,
