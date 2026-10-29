@@ -64,3 +64,14 @@ class Job(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    # Determines when another worker may reclaim the job
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+    DateTime(timezone=True),
+    nullable=True,
+    )
+    
+    # Identifies the current claim, preventing an old worker from updating the job after losing ownership
+    lease_token: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+    )
