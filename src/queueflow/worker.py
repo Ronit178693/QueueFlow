@@ -1,10 +1,11 @@
 import json
 import time
 
+from sqlalchemy import update
 from queueflow.db.models import Job
 from queueflow.db.sessions import SessionLocal
 from queueflow.sqs_client import get_queue_url, sqs
-from queueflow.claims import claim_job
+from queueflow.claims import claim_job, complete_job
 
 
 def process_job(job_type: str, payload: dict) -> None:
@@ -15,6 +16,38 @@ def process_job(job_type: str, payload: dict) -> None:
     time.sleep(3)
 
     print("Business operation completed.")
+
+
+def fail_job(db, job_id: str, token: str, error: str) -> bool:
+    """Only the current lease owner may mark a job failed."""
+    statement = (
+        update(Job)
+        .where(
+            Job.id == job_id,
+            Job.status == "processing",
+            Job.lease_token == token,
+        )
+        .values(
+            status="failed",
+            last_error=error[:1000],
+            lease_expires_at=None,
+            lease_token=None,
+        )
+        .returning(Job.id)
+    )
+
+    failed_id = db.execute(statement).scalar_one_or_none()
+
+    if failed_id is None:
+        db.rollback()
+        return False
+
+    db.commit()
+    return True
+
+
+
+
 
 
 def run_worker() -> None:
@@ -61,11 +94,22 @@ def run_worker() -> None:
 
                         continue
 
-                    process_job(job.job_type, job.payload)
+                    token = job.lease_token
+                    job_type = job.job_type
+                    payload = job.payload
 
-                    job.status = "succeeded"
-                    db.commit()
+                print(f"Claimed job {job_id} with token {token}")
 
+                process_job(job_type, payload)
+
+                with SessionLocal() as db:
+                    completed = complete_job(db, job_id, token)
+
+                if not completed:
+                    print(f"Job {job_id}: lease ownership lost.")
+                    # Don't delete: another worker may need this message.
+                    continue
+                
                 sqs.delete_message(
                     QueueUrl=queue_url,
                     ReceiptHandle=receipt_handle,
@@ -73,23 +117,21 @@ def run_worker() -> None:
                 print(f"Job {job_id} succeeded and message deleted.")
 
             except Exception as exc:
-                print(f"Processing failed: {exc}")
+                print(f"Processing failed for {job_id}: {exc}")
 
-                try:
-                    body = json.loads(message["Body"])
-                    with SessionLocal() as db:
-                        job = db.get(Job, body["job_id"])
-                        
-                        # If the worker couldnt process the job and the status is not succeeded then mark the status as false
-                        if job is not None and job.status != "succeeded":
-                            job.status = "failed"
-                            job.last_error = str(exc)[:1000]
-                            db.commit()
-                except Exception as db_exc:
-                    print(f"Could not record failure: {db_exc}")
+                if job_id is not None and token is not None:
+                    try:
+                        with SessionLocal() as db:
+                            updated = fail_job(
+                                db, job_id, token, str(exc)
+                            )
+                        if not updated:
+                            print("Failure update rejected: lease no longer owned.")
+                    except Exception as db_exc:
+                        print(f"Could not record failure: {db_exc}")
 
-                # Leave the message undeleted. SQS may redeliver it
-                # after the visibility timeout expires.
+                # Leave SQS message undeleted for redelivery.
+
 
 
 if __name__ == "__main__":
