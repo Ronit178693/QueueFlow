@@ -6,7 +6,7 @@ queue_url = get_queue_url()
 sqs.set_queue_attributes(
     QueueUrl=queue_url,
     Attributes={
-        "VisibilityTimeout": "60",
+        "VisibilityTimeout": "5",
     },
 )
 

@@ -9,14 +9,12 @@ from queueflow.claims import claim_job, complete_job
 
 
 def process_job(job_type: str, payload: dict) -> None:
-    """Simulate the business operation for a job."""
-    print(f"Executing {job_type}: {payload}")
+    print(f"Processing {job_type}: {payload}", flush=True)
 
-    # Simulate a slow task.
-    time.sleep(3)
+    if payload.get("simulate_failure"):
+        raise RuntimeError("Simulated processing failure")
 
-    print("Business operation completed.")
-
+    print("Business operation completed.", flush=True)
 
 def fail_job(db, job_id: str, token: str, error: str) -> bool:
     """Only the current lease owner may mark a job failed."""
